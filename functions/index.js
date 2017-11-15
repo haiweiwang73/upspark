@@ -17,7 +17,7 @@ const mailTransport = nodemailer.createTransport(`smtps://${gmailEmail}:${gmailP
 
 
 
-var intrests = ["Sports", "Music", "Travel", "Food", "Dating"];
+var intrests = ["Sports", "Music", "Traveling", "Food", "LGBT","Drinking"];
 
 
 // Take the text parameter passed to this HTTP endpoint and insert it into the
@@ -25,65 +25,80 @@ var intrests = ["Sports", "Music", "Travel", "Food", "Dating"];
 exports.sendMessage = functions.https.onRequest((req, res) => {
   // Grab the text parameter.
   const original = req.query.text;
+  var mainCandidateArr = [];
+	intrests.forEach(function (intrest) {
+		admin.database().ref('/userProfile').once('value').then( function(snapshot) {
+	  		var users  = snapshot.val();
+			var usersArr = [];
+			var usersDetailsArr = [];
+			users = shuffleArray(users);
+
+	  		var headCount = 0;
+	  		Object.keys(users).forEach(function(usersId){
+	  			var userDetail = users[usersId];
+	  			var email = userDetail.email;
+	  			var intrestGroup = userDetail.interests;
+	  			if(intrestGroup.indexOf(intrest.toLowerCase())!= -1 && mainCandidateArr.indexOf(email) == -1 && headCount<5){
+	  				console.log(" push email : ",email);
+	  				usersArr.push(email);
+	  				usersDetailsArr.push(userDetail);
+	  				mainCandidateArr.push(email);
+					headCount++;
+	  			}	
+
+	  		});
 
 
-intrests.forEach(function (intrest) {
+	  		if(usersArr.length > 0 ){
+				var date = new Date();
+				date.setDate(date.getDate() + 7);
+				date.setHours(9,0,0,0);
+
+				var formattedDate = getDateNow(date);
+			    var event = {
+			    	"group": intrest,
+			    	"time": date.valueOf(),
+			    	"members": usersArr,
+			    };
+
+			    var id = date.valueOf();
+			    var eventRef = admin.database().ref('/meetup').push(event);
 
 
+			    var mailingList = '';
+			    for(var i = 0, len = usersArr.length; i < len; i++){
+			    	mailingList = mailingList + usersArr[i] + ','; 
+			    }
 
-    var usersArr = findUsers(intrest);
+			    if(mailingList.length >0){
+			    	mailingList = mailingList.substring(0,mailingList.length-1);
+			        var htmltext =  '<h1>Come grab your coffee with Uptakers!</h1><h2>Time : '+ formattedDate +' 9:00AM </h2> <p>Here is the list of your morning coffee companion :</p>';
 
-    var date = getDateNow("/");
-    var dateNoDilim = getDateNow("");
+			        for(var i = 0, len = usersDetailsArr.length; i < len; i++){
+			        	htmltext = htmltext + "<li> "+usersDetailsArr[i].name+"  --- "+usersDetailsArr[i].about+"</li>"
+			        }
 
-    var event = {
-    	"group": intrest,
-    	"time": date,
-    	"members": usersArr,
-    };
+			    	  const mailOptions = {
+			    		to: mailingList,
+			    		subject: 'Upspark invitation for coffee with Uptakers for '+ intrest + '@'+ formattedDate+' 9:00AM',
+			    		html: htmltext
+			  		  };
 
-    var obj = {
-        [dateNoDilim]: event
-    };
+			  		    mailTransport.sendMail(mailOptions).then(() => {
+			    		 console.log('Mail sent to: '+ mailingList);
+			  		   });
 
-    admin.database().ref('/events').push(obj).then(snapshot =>{
-    	console.log("create event: "+ event);
-    });
+			    }
+			}
+		});
 
-
-
-    var mailingList = '';
-    for(var i = 0, len = usersArr.length; i < len; i++){
-    	mailingList = mailingList + usersArr[i] + ','; 
-    }
-
-    if(mailingList.length >0){
-    	mailingList = mailingList.substring(0,mailingList.length-1);
-    	  const mailOptions = {
-    		to: mailingList,
-    		subject: 'Testing upspark3'+ intrest,
-    		html: '<p>Come grab your coffee with Uptakers!</p><p>Time : '+ date +'</p>'
-  		  };
-
-  		    mailTransport.sendMail(mailOptions).then(() => {
-    		 console.log('Mail sent to: '+ mailingList);
-  		   });
-
-    }
-
-
-})
-  
-  return;
+	});
+	  
+	return res.sendStatus(200);
 
 });
 
-function findUsers(intrest){
-	return ["c.jerry.virgo@uptake.com","srijay.sunil@uptake.com"];
-}
-
-function getDateNow(dilim){
-	var today = new Date();
+function getDateNow(today){
 	var dd = today.getDate();
 	var mm = today.getMonth()+1; //January is 0!
 	var yyyy = today.getFullYear();
@@ -96,11 +111,21 @@ function getDateNow(dilim){
     	mm = '0'+mm
 	} 
 
-	today = mm + dilim + dd + dilim + yyyy;
+	today = mm + "-" + dd + "-" + yyyy;
 
 	return today;
 }
 
+function shuffleArray(array) {
+    for (var i = array.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var temp = array[i];
+        array[i] = array[j];
+        array[j] = temp;
+    }
+
+    return array;
+}
 // Listens for new messages added to /messages/:pushId/original and creates an
 // uppercase version of the message to /messages/:pushId/uppercase
 // exports.checkOnCreate = functions.auth.user().onCreate(event => {
